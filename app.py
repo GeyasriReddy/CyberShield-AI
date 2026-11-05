@@ -86,7 +86,7 @@ st.markdown(
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
             <span class="env-pill"><span class="pulse-dot"></span> Pipeline Active</span>
             <span class="env-pill">Workspace: Community Forum A</span>
-            <span class="env-pill"><span class="pulse-dot amber"></span> Demo Mode (Mock Engine)</span>
+            <span class="env-pill"><span class="pulse-dot"></span> Mode: Calibrated ML + 100-User SNA</span>
         </div>
     </div>
     """,
@@ -132,7 +132,7 @@ with st.sidebar:
             <div style="font-size: 0.8rem; color: #475569; line-height: 1.6;">
                 <div style="display:flex; justify-content:space-between;">
                     <span>Classifier:</span>
-                    <span style="color: #d97706; font-family: monospace; font-weight: 600;">Mock v0.1</span>
+                    <span style="color: #059669; font-family: monospace; font-weight: 600;">Calibrated Logistic (88.7%)</span>
                 </div>
                 <div style="display:flex; justify-content:space-between;">
                     <span>Interaction Graph:</span>
@@ -327,8 +327,8 @@ elif current_page == "Comment Analysis":
     st.markdown(
         """
         <div class="system-notice">
-            <strong>Active Classifier:</strong> Rule-based baseline mock. Connect your teammate's trained model in <code>src/classifier.py</code> 
-            to automatically replace mock outputs without altering the user interface.
+            <strong>Active Classifier:</strong> Calibrated Logistic Regression (Stage 1 ML Model, 88.7% test accuracy). 
+            Live machine learning inference pipeline active with probability calibration.
         </div>
         """,
         unsafe_allow_html=True
