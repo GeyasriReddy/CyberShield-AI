@@ -40,3 +40,13 @@ Thumbs.db
 # Large Datasets and zips (keep code and sample data only)
 A Comprehensive Dataset for Automated Cyberbullying Detection/
 *.zip
+
+# Member 1: exclude unnecessary large files
+data/raw/
+datasets/
+backups/
+scratch/
+
+# Temporary validation outputs
+results_validation/
+data/validation/

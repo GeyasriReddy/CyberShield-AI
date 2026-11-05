@@ -1,0 +1,14 @@
+metric_name,value,description
+total_registered_users,100.0,Total students in the cohort (nodes in graph)
+total_communication_events,90356.0,Total messages exchanged (edges in MultiDiGraph)
+total_directed_dyads,9511.0,Unique ordered communicating pairs (edges in DiGraph)
+network_density,0.9607,Density of directed communication graph
+mean_out_degree,95.11,Mean number of distinct recipients per user
+mean_in_degree,95.11,Mean number of distinct senders per user
+mean_messages_per_dyad,9.5,Mean messages transmitted per ordered pair
+mean_predicted_aggression_prob,0.4012,Mean calibrated aggression probability across messages
+total_predicted_aggressive_messages,32504.0,Count of messages classified as aggressive (P >= 0.5)
+reciprocal_dyads_count,9144.0,Ordered dyads where reverse communication exists
+asymmetric_dyads_count,367.0,Ordered dyads with strictly one-way communication
+max_outgoing_aggression_volume_user,1.0,User with highest total outgoing predicted aggression volume
+max_incoming_aggression_volume_user,64.0,User with highest total incoming predicted aggression exposure

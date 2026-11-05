@@ -1,0 +1,9 @@
+model_name,feature_set,architecture,num_features,val_accuracy,val_f1,val_pr_auc,val_roc_auc,test_accuracy,test_precision,test_recall,test_f1,test_macro_f1,test_pr_auc,test_roc_auc
+M1_Baseline (Logistic Regression),M1_Baseline,Logistic Regression,6,0.8851,0.62,0.6165,0.9514,0.886,0.4746,0.8792,0.6165,0.7748,0.5728,0.9419
+M1_Baseline (Random Forest),M1_Baseline,Random Forest,6,0.8992,0.6343,0.5911,0.948,0.9035,0.523,0.8389,0.6443,0.7943,0.6301,0.9452
+M2_NLP_Only (Logistic Regression),M2_NLP_Only,Logistic Regression,3,0.9112,0.685,0.6378,0.9603,0.8937,0.4947,0.9329,0.6465,0.792,0.6101,0.9544
+M2_NLP_Only (Random Forest),M2_NLP_Only,Random Forest,3,0.9154,0.6907,0.6637,0.9606,0.8937,0.4945,0.9128,0.6415,0.7896,0.6169,0.9515
+M3_SNA_Only (Logistic Regression),M3_SNA_Only,Logistic Regression,13,0.8788,0.6109,0.6204,0.9523,0.8755,0.4508,0.8926,0.5991,0.7627,0.5712,0.9429
+M3_SNA_Only (Random Forest),M3_SNA_Only,Random Forest,13,0.907,0.6489,0.6285,0.953,0.9098,0.5442,0.8255,0.656,0.802,0.6485,0.9474
+M4_Combined (Logistic Regression),M4_Combined,Logistic Regression,18,0.9063,0.678,0.6636,0.9643,0.8958,0.5,0.953,0.6559,0.7972,0.6207,0.9596
+M4_Combined (Random Forest),M4_Combined,Random Forest,18,0.9281,0.7228,0.7073,0.9674,0.9133,0.5532,0.8725,0.6771,0.8135,0.7012,0.9635
