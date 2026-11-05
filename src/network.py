@@ -2,13 +2,18 @@
 Social Network Analysis (SNA) Module
 ------------------------------------
 Handles graph construction, centrality metrics, community detection,
-and academic-grade interactive visualizations using NetworkX and Plotly.
-Supports both the 100-user Mendeley cyberbullying communication dataset
-and an isolated synthetic fallback graph.
+and academic-grade interactive node-link and tree visualizations using NetworkX and Plotly.
+Supports:
+1. Global Interaction Topology (Node-link)
+2. Cyberbullying Directed Attack Network (Node-link)
+3. Radial Ego-Tree / Star Network (Tree graph centered on selected user)
+4. Minimum Spanning Tree (MST - Acyclic backbone tree)
+5. Centrality and Community analytical charts
 """
 
 from typing import Dict, Any, List, Optional, Tuple
 import os
+import math
 import networkx as nx
 import plotly.graph_objects as go
 import plotly.express as px
@@ -29,7 +34,6 @@ def load_dataset_interaction_graph() -> Tuple[nx.DiGraph, pd.DataFrame, Dict[str
     """
     Constructs a directed NetworkX graph (DiGraph) from the real Mendeley
     cyberbullying communication dataset (100 users, 9,511 dyads, 90,356 messages).
-    Falls back to synthetic benchmark if the dataset file is not accessible.
     """
     if os.path.exists(CB_LABELS_PATH):
         try:
@@ -61,7 +65,7 @@ def load_dataset_interaction_graph() -> Tuple[nx.DiGraph, pd.DataFrame, Dict[str
                 "is_real": True
             }
             return G, df_cb, summary
-        except Exception as e:
+        except Exception:
             pass
 
     # Fallback synthetic graph
@@ -82,9 +86,7 @@ def load_dataset_interaction_graph() -> Tuple[nx.DiGraph, pd.DataFrame, Dict[str
 
 
 def load_synthetic_interaction_graph() -> nx.Graph:
-    """
-    Controlled 20-node fallback synthetic network.
-    """
+    """Controlled 20-node fallback synthetic network."""
     G = nx.Graph()
     c1 = [("usr_101", "usr_102"), ("usr_101", "usr_103"), ("usr_101", "usr_104"),
           ("usr_102", "usr_103"), ("usr_103", "usr_105"), ("usr_104", "usr_106")]
@@ -96,20 +98,15 @@ def load_synthetic_interaction_graph() -> nx.Graph:
 
     for u, v in c1 + c2 + c3 + bridges:
         G.add_edge(u, v, total_messages=10, aggressive_count=1, cb_label=0)
-
     return G
 
 
 def compute_network_metrics(G: nx.Graph) -> Tuple[Dict[str, Dict[str, Any]], pd.DataFrame]:
-    """
-    Computes degree centrality, betweenness centrality, in/out degrees, and communities.
-    """
+    """Computes degree centrality, betweenness centrality, in/out degrees, and communities."""
     if len(G.nodes) == 0:
         return {}, pd.DataFrame()
 
     is_directed = G.is_directed()
-
-    # Undirected projection for modularity community detection
     G_undir = G.to_undirected() if is_directed else G
     communities = list(nx.community.greedy_modularity_communities(G_undir))
     community_map = {}
@@ -129,7 +126,6 @@ def compute_network_metrics(G: nx.Graph) -> Tuple[Dict[str, Dict[str, Any]], pd.
         in_deg = G.in_degree(node) if is_directed else degree_dict.get(node, 0)
         out_deg = G.out_degree(node) if is_directed else degree_dict.get(node, 0)
 
-        # Aggregate aggression sent if edge attributes exist
         aggr_sent = 0
         total_msgs = 0
         if is_directed:
@@ -165,16 +161,12 @@ def compute_network_metrics(G: nx.Graph) -> Tuple[Dict[str, Dict[str, Any]], pd.
 
 
 def get_user_network_context(user_id: str, G: nx.Graph, metrics_map: Dict[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """
-    Retrieves focused network context for a specific user ID.
-    Normalizes numeric IDs (e.g. 'usr_107', '107', 'usr_015').
-    """
+    """Retrieves focused network context for a specific user ID."""
     if not user_id:
         return None
 
     target = user_id.strip()
     if target not in metrics_map:
-        # Try zero-padded format: e.g., '15' -> 'usr_015'
         digits = "".join([ch for ch in target if ch.isdigit()])
         if digits:
             candidate = f"usr_{int(digits):03d}"
@@ -201,17 +193,14 @@ def get_user_network_context(user_id: str, G: nx.Graph, metrics_map: Dict[str, D
 
 
 # ==========================================
-# VISUAL GRAPH 1: INTERACTIVE TOPOLOGY
+# 1. NODE-LINK: GLOBAL NETWORK TOPOLOGY
 # ==========================================
 def create_network_figure(
     G: nx.Graph,
     metrics_map: Dict[str, Dict[str, Any]],
     highlight_user: Optional[str] = None
 ) -> go.Figure:
-    """
-    Renders an interactive force-directed Plotly network topology graph.
-    """
-    # Sample subgraph for layout clarity if node count is large
+    """Renders interactive force-directed node-link communication network."""
     display_nodes = list(G.nodes)[:60] if len(G.nodes) > 60 else list(G.nodes)
     if highlight_user and highlight_user in G and highlight_user not in display_nodes:
         display_nodes.append(highlight_user)
@@ -219,10 +208,7 @@ def create_network_figure(
     subG = G.subgraph(display_nodes)
     pos = nx.spring_layout(subG, seed=42, k=0.35)
 
-    edge_x = []
-    edge_y = []
-    hl_edge_x = []
-    hl_edge_y = []
+    edge_x, edge_y, hl_edge_x, hl_edge_y = [], [], [], []
 
     for edge in subG.edges():
         u, v = edge
@@ -318,45 +304,301 @@ def create_network_figure(
             hovermode="closest",
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            height=460
+            height=440
         )
     )
     return fig
 
 
 # ==========================================
-# VISUAL GRAPH 2: DEGREE DISTRIBUTION
+# 2. NODE-LINK: CYBERBULLYING ATTACK NETWORK
 # ==========================================
-def create_degree_distribution_figure(df_metrics: pd.DataFrame) -> go.Figure:
+def create_attack_network_figure(df_cb: pd.DataFrame, max_edges: int = 150) -> go.Figure:
     """
-    Renders the degree distribution histogram, illustrating scale-free social hub behavior.
+    Renders the filtered cyberbullying attack network (CB_Label == 1).
+    Displays only direct aggression and harassment links between users.
     """
-    fig = px.histogram(
-        df_metrics,
-        x="Degree",
-        nbins=20,
-        color_discrete_sequence=["#2563eb"],
-        labels={"Degree": "Node Degree (Interaction Count)", "count": "Number of Users"}
+    if df_cb.empty or "CB_Label" not in df_cb.columns:
+        return go.Figure()
+
+    df_attack = df_cb[df_cb["CB_Label"] == 1].head(max_edges)
+    G_attack = nx.DiGraph()
+
+    for _, r in df_attack.iterrows():
+        u = f"usr_{int(r['User1 ID']):03d}"
+        v = f"usr_{int(r['User2 ID']):03d}"
+        G_attack.add_edge(u, v, weight=int(r['Aggressive_Count']))
+
+    pos = nx.spring_layout(G_attack, seed=42, k=0.4)
+
+    edge_x, edge_y = [], []
+    for u, v in G_attack.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.2, color="rgba(220, 38, 38, 0.45)"),
+        hoverinfo="none",
+        mode="lines",
+        showlegend=False
     )
-    fig.update_layout(
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        font=dict(color="#475569", family="Inter, sans-serif"),
-        margin=dict(t=30, b=25, l=35, r=20),
-        height=280,
-        xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
-        yaxis=dict(showgrid=True, gridcolor="#f1f5f9", title="User Count")
+
+    in_deg = dict(G_attack.in_degree())
+    out_deg = dict(G_attack.out_degree())
+
+    node_x, node_y, node_color, node_size, node_text, hover_text = [], [], [], [], [], []
+
+    for node in G_attack.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+
+        outs = out_deg.get(node, 0)
+        ins = in_deg.get(node, 0)
+        size = 10 + min(outs * 1.5, 20)
+
+        # Attackers colored deep red, victims colored amber/orange
+        color = "#dc2626" if outs > ins else "#d97706"
+
+        node_color.append(color)
+        node_size.append(size)
+        node_text.append(node)
+        hover_text.append(
+            f"<b>Node:</b> {node}<br>"
+            f"<b>Outgoing Attacks:</b> {outs}<br>"
+            f"<b>Incoming Attacks:</b> {ins}<br>"
+            f"<b>Role:</b> {'Primary Instigator' if outs > ins else 'Targeted Victim'}"
+        )
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        hoverinfo="text",
+        hovertext=hover_text,
+        text=node_text,
+        textposition="top center",
+        textfont=dict(size=8, color="#475569", family="Inter, sans-serif"),
+        marker=dict(
+            color=node_color,
+            size=node_size,
+            line=dict(width=1.5, color="#ffffff")
+        ),
+        showlegend=False
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            margin=dict(b=15, l=15, r=15, t=15),
+            hovermode="closest",
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=340
+        )
     )
     return fig
 
 
 # ==========================================
-# VISUAL GRAPH 3: TOP BETWEENNESS CENTRALITY
+# 3. TREE GRAPH: RADIAL EGO-TREE (STAR TREE)
+# ==========================================
+def create_ego_tree_figure(
+    user_id: str,
+    G: nx.Graph,
+    df_cb: pd.DataFrame
+) -> go.Figure:
+    """
+    Renders a radial hierarchical tree layout centered on the selected user node.
+    Root node at center, branches linking to 1st-degree contacts.
+    """
+    if not user_id or user_id not in G:
+        return go.Figure()
+
+    neighbors = list(G.successors(user_id)) if G.is_directed() else list(G.neighbors(user_id))
+    display_neighbors = neighbors[:32]  # Cap for radial clarity
+
+    # Radial tree coordinates: center at (0, 0), neighbors on circle radius R=1
+    pos = {user_id: (0.0, 0.0)}
+    num_n = max(len(display_neighbors), 1)
+
+    for i, nbr in enumerate(display_neighbors):
+        angle = 2.0 * math.pi * i / num_n
+        pos[nbr] = (math.cos(angle), math.sin(angle))
+
+    edge_x, edge_y, edge_colors = [], [], []
+
+    # Map harassment relationships
+    attack_pairs = set()
+    if not df_cb.empty and "CB_Label" in df_cb.columns:
+        for _, r in df_cb[(df_cb["CB_Label"] == 1)].iterrows():
+            attack_pairs.add((f"usr_{int(r['User1 ID']):03d}", f"usr_{int(r['User2 ID']):03d}"))
+
+    for nbr in display_neighbors:
+        x0, y0 = pos[user_id]
+        x1, y1 = pos[nbr]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.2, color="#94a3b8"),
+        hoverinfo="none",
+        mode="lines",
+        showlegend=False
+    )
+
+    node_x, node_y, node_color, node_size, node_text, hover_text = [], [], [], [], [], []
+
+    # Root Node (Selected User)
+    node_x.append(0.0)
+    node_y.append(0.0)
+    node_color.append("#2563eb")  # Blue root
+    node_size.append(26)
+    node_text.append(user_id)
+    hover_text.append(f"<b>Root Center:</b> {user_id}<br><b>Total Direct Ties:</b> {len(neighbors)}")
+
+    # Branch Nodes
+    for nbr in display_neighbors:
+        x, y = pos[nbr]
+        node_x.append(x)
+        node_y.append(y)
+
+        is_aggr = (user_id, nbr) in attack_pairs or (nbr, user_id) in attack_pairs
+        color = "#dc2626" if is_aggr else "#059669"
+
+        node_color.append(color)
+        node_size.append(12)
+        node_text.append(nbr)
+        hover_text.append(
+            f"<b>Contact:</b> {nbr}<br>"
+            f"<b>Connection:</b> {'Cyberbullying Dyad' if is_aggr else 'Benign Communication'}"
+        )
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        hoverinfo="text",
+        hovertext=hover_text,
+        text=node_text,
+        textposition="top center",
+        textfont=dict(size=8, color="#475569", family="Inter, sans-serif"),
+        marker=dict(
+            color=node_color,
+            size=node_size,
+            line=dict(width=1.8, color="#ffffff")
+        ),
+        showlegend=False
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            margin=dict(b=15, l=15, r=15, t=15),
+            hovermode="closest",
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=340
+        )
+    )
+    return fig
+
+
+# ==========================================
+# 4. TREE GRAPH: MINIMUM SPANNING TREE (MST)
+# ==========================================
+def create_mst_tree_figure(df_cb: pd.DataFrame) -> go.Figure:
+    """
+    Constructs the NetworkX Minimum Spanning Tree (MST) spanning the 100 users.
+    An acyclic mathematical tree preserving highest-frequency interaction pathways.
+    """
+    if df_cb.empty:
+        return go.Figure()
+
+    G_undir = nx.Graph()
+    for _, r in df_cb.iterrows():
+        u = f"usr_{int(r['User1 ID']):03d}"
+        v = f"usr_{int(r['User2 ID']):03d}"
+        w = 1.0 / max(int(r['Total_messages']), 1)
+        G_undir.add_edge(u, v, weight=w)
+
+    mst = nx.minimum_spanning_tree(G_undir, weight='weight')
+    pos = nx.spring_layout(mst, seed=42, k=0.45)
+
+    edge_x, edge_y = [], []
+    for u, v in mst.edges():
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.4, color="#0284c7"),
+        hoverinfo="none",
+        mode="lines",
+        showlegend=False
+    )
+
+    deg = dict(mst.degree())
+    node_x, node_y, node_color, node_size, node_text, hover_text = [], [], [], [], [], []
+
+    for node in mst.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+
+        d = deg.get(node, 1)
+        size = 8 + min(d * 2.5, 20)
+        color = "#2563eb" if d > 3 else "#64748b"
+
+        node_color.append(color)
+        node_size.append(size)
+        node_text.append(node)
+        hover_text.append(f"<b>Tree Node:</b> {node}<br><b>Tree Degree (Branches):</b> {d}")
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode="markers+text",
+        hoverinfo="text",
+        hovertext=hover_text,
+        text=node_text,
+        textposition="top center",
+        textfont=dict(size=8, color="#475569", family="Inter, sans-serif"),
+        marker=dict(
+            color=node_color,
+            size=node_size,
+            line=dict(width=1.5, color="#ffffff")
+        ),
+        showlegend=False
+    )
+
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            margin=dict(b=15, l=15, r=15, t=15),
+            hovermode="closest",
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            height=340
+        )
+    )
+    return fig
+
+
+# ==========================================
+# 5. BAR CHART 1: TOP 10 BETWEENNESS BRIDGES
 # ==========================================
 def create_centrality_ranking_figure(df_metrics: pd.DataFrame) -> go.Figure:
-    """
-    Renders Top 10 bridge nodes ranked by Betweenness Centrality.
-    """
+    """Renders Top 10 bridge nodes ranked by Betweenness Centrality."""
     top10 = df_metrics.head(10).sort_values(by="Betweenness Centrality", ascending=True)
 
     fig = go.Figure(go.Bar(
@@ -380,47 +622,10 @@ def create_centrality_ranking_figure(df_metrics: pd.DataFrame) -> go.Figure:
 
 
 # ==========================================
-# VISUAL GRAPH 4: PEERNESS VS AGGRESSION
-# ==========================================
-def create_peerness_aggression_figure(df_cb: pd.DataFrame) -> Optional[go.Figure]:
-    """
-    Visualizes Peerness vs Intent to Harm / Cyberbullying label from real dataset dyads.
-    """
-    if df_cb.empty or "Peerness" not in df_cb.columns:
-        return None
-
-    sample_df = df_cb.sample(n=min(len(df_cb), 600), random_state=42).copy()
-    sample_df["Status"] = sample_df["CB_Label"].map({0: "Benign Communication", 1: "Cyberbullying Dyad"})
-
-    fig = px.scatter(
-        sample_df,
-        x="Peerness",
-        y="Intent_to_Harm",
-        color="Status",
-        color_discrete_map={"Benign Communication": "#059669", "Cyberbullying Dyad": "#dc2626"},
-        opacity=0.65,
-        labels={"Peerness": "Peerness (Social Distance)", "Intent_to_Harm": "Intent to Harm Score"}
-    )
-    fig.update_layout(
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        font=dict(color="#475569", family="Inter, sans-serif"),
-        margin=dict(t=25, b=25, l=35, r=20),
-        height=280,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.28, xanchor="center", x=0.5),
-        xaxis=dict(showgrid=True, gridcolor="#f1f5f9"),
-        yaxis=dict(showgrid=True, gridcolor="#f1f5f9")
-    )
-    return fig
-
-
-# ==========================================
-# VISUAL GRAPH 5: COMMUNITY CLUSTERS BREAKDOWN
+# 6. BAR CHART 2: COMMUNITY CLUSTERS BREAKDOWN
 # ==========================================
 def create_community_breakdown_figure(df_metrics: pd.DataFrame) -> go.Figure:
-    """
-    Visualizes the size and cumulative aggressive volume across detected communities.
-    """
+    """Visualizes the size and cumulative aggressive volume across detected communities."""
     comm_stats = df_metrics.groupby("Community").agg(
         User_Count=("User ID", "count"),
         Aggressive_Volume=("Aggressive Sent", "sum")
@@ -441,33 +646,4 @@ def create_community_breakdown_figure(df_metrics: pd.DataFrame) -> go.Figure:
         xaxis=dict(showgrid=False),
         yaxis=dict(showgrid=True, gridcolor="#f1f5f9")
     )
-    return fig
-
-
-# ==========================================
-# VISUAL GRAPH 6: RECIPROCITY & CYBERBULLYING
-# ==========================================
-def create_reciprocity_figure(summary: Dict[str, Any]) -> go.Figure:
-    """
-    Donut chart of benign dyads vs cyberbullying dyads in the network.
-    """
-    labels = ["Benign Dyads", "Cyberbullying Dyads"]
-    values = [summary.get("benign_dyads", 8519), summary.get("cb_dyads", 992)]
-
-    fig = px.pie(
-        names=labels,
-        values=values,
-        hole=0.6,
-        color=labels,
-        color_discrete_map={"Benign Dyads": "#059669", "Cyberbullying Dyads": "#dc2626"}
-    )
-    fig.update_layout(
-        paper_bgcolor="#ffffff",
-        plot_bgcolor="#ffffff",
-        font=dict(color="#475569", family="Inter, sans-serif"),
-        margin=dict(t=15, b=15, l=15, r=15),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-        height=280
-    )
-    fig.update_traces(textposition="inside", textinfo="percent+label")
     return fig

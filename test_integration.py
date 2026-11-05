@@ -8,10 +8,11 @@ from src.network import (
     compute_network_metrics,
     get_user_network_context,
     create_network_figure,
-    create_degree_distribution_figure,
+    create_attack_network_figure,
+    create_ego_tree_figure,
+    create_mst_tree_figure,
     create_centrality_ranking_figure,
-    create_community_breakdown_figure,
-    create_reciprocity_figure
+    create_community_breakdown_figure
 )
 from src.recommender import generate_recommendation
 from src.data_store import get_initial_sample_comments, calculate_overview_metrics
@@ -34,14 +35,16 @@ overview = calculate_overview_metrics(comments)
 print("Overview metrics:", overview)
 
 fig1 = create_network_figure(G, metrics_map, highlight_user="usr_015")
-fig2 = create_degree_distribution_figure(df_metrics)
-fig3 = create_centrality_ranking_figure(df_metrics)
-fig4 = create_community_breakdown_figure(df_metrics)
-fig5 = create_reciprocity_figure(summary)
+fig2 = create_attack_network_figure(df_cb, max_edges=60)
+fig3 = create_ego_tree_figure("usr_015", G, df_cb)
+fig4 = create_mst_tree_figure(df_cb)
+fig5 = create_centrality_ranking_figure(df_metrics)
+fig6 = create_community_breakdown_figure(df_metrics)
 
-print("Figure 1 traces:", len(fig1.data))
-print("Figure 2 traces:", len(fig2.data))
-print("Figure 3 traces:", len(fig3.data))
-print("Figure 4 traces:", len(fig4.data))
-print("Figure 5 traces:", len(fig5.data))
-print("ALL SNA VISUAL & INTEGRATION CHECKS PASSED!")
+print("Figure 1 (Topology) traces:", len(fig1.data))
+print("Figure 2 (Attack Network) traces:", len(fig2.data))
+print("Figure 3 (Radial Ego-Tree) traces:", len(fig3.data))
+print("Figure 4 (MST Tree) traces:", len(fig4.data))
+print("Figure 5 (Centrality Bar) traces:", len(fig5.data))
+print("Figure 6 (Community Bar) traces:", len(fig6.data))
+print("ALL NODE & TREE VISUALIZATION CHECKS PASSED!")

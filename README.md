@@ -30,15 +30,46 @@ SNA  PROJECT/
 ### Module Responsibilities
 
 1. **`app.py`**: Handles page navigation, dashboard layouts, metrics rendering, interactive user inputs, and session state persistence across the 4 core views:
-   - **Overview**: Audit metrics, classification distribution donut chart, and recent moderation logs.
-   - **Comment Analysis**: Single comment text submission, user lookup, mock prediction breakdown, and queue dispatch.
-   - **Network Analysis**: Interactive Plotly graph of user interactions, node inspection, and betweenness centrality ledger.
+   - **Overview**: Audit metrics, classification distribution donut chart, multi-agent status, and recent moderation logs.
+   - **Comment Analysis**: Single comment text submission, batch CSV/JSON file upload, mock prediction breakdown, and queue dispatch.
+   - **Network Analysis**: 4 Node-Link & Tree network visualizers, 2 quantitative bar charts, user inspection drawer, and betweenness centrality ledger.
    - **Review Queue**: Moderator review workbench with approval, confirmation, and dismissal actions.
 2. **`src/classifier.py`**: Defines the `ClassifierResult` data contract and the mock heuristic engine. **This is where the trained ML model is integrated.**
-3. **`src/network.py`**: Builds the graph, computes NetworkX metrics (`degree_centrality`, `betweenness_centrality`, greedy modularity communities), and builds the interactive Plotly visualization. **This is where real interaction data is integrated.**
+3. **`src/network.py`**: Connects the 100-user Mendeley dataset (90,356 messages, 9,511 dyads), computes NetworkX metrics, and builds interactive Plotly node-link and tree visualizations (Attack Network, Radial Ego-Tree, MST Backbone Tree).
 4. **`src/recommender.py`**: Evaluates classifier output and network context under an ethical rule system (`Allow`, `Review`, `Flag`). Network metrics indicate reach and amplification potential—they are **never** treated as proof of guilt.
-5. **`src/data_store.py`**: Manages sample moderation stream records, review queue operations, and input validation.
-6. **`src/styles.py`**: Restrained dark slate visual system (`#0b0f19`, `#111827`, `#273549`, muted blue, amber, emerald).
+5. **`src/data_store.py`**: Manages sample moderation stream records, batch file processing, review queue operations, and input validation.
+6. **`src/styles.py`**: Clean, accessible light SaaS design system inspired by Stripe and GitHub.
+
+---
+
+## Multi-Agent AI Architecture (Agentic AI)
+
+CyberShield AI implements a **4-Agent Collaborative Moderation Pipeline**:
+
+1. **Agent 1: NLP Content Classifier Agent (Agentic NLP)**
+   - Scans incoming comment text for toxicity, aggressive intent, and harassment patterns.
+   - Produces normalized confidence scores and class probability distributions.
+2. **Agent 2: Social Network Analyst Agent (Agentic SNA via NetworkX)**
+   - Computes structural network properties: betweenness centrality, degree distribution, community modularity, and communication reciprocity.
+   - Identifies bridge users who act as bottlenecks for viral amplification across clusters.
+3. **Agent 3: Decision & Triage Agent (Rule Orchestrator)**
+   - Synthesizes text classification and topological reach features to determine action recommendations (`Allow`, `Review`, `Flag`) with urgency tiers.
+   - Generates transparent, human-readable audit explanations.
+4. **Agent 4: Human-in-the-Loop Moderator Agent (Supervisory Controller)**
+   - Provides final human verification in the Review Queue without automated account penalties or bans.
+
+---
+
+## Social Network Analysis (SNA) Visual Suite
+
+The platform provides an extensive suite of interactive node-link and tree visualizations:
+
+* **Graph 1: Global Interaction Topology (Node-Link Network)** — Full communication graph with community coloring and neighborhood highlighting.
+* **Graph 2: Cyberbullying Attack Network (Directed Node-Link)** — Filtered view isolating the 992 cyberbullying relationships, identifying instigators (red) and targets (amber).
+* **Graph 3: Radial Ego-Tree (Hierarchical Star Tree)** — Tree layout centered on a selected root user, branching out to their direct contacts color-coded by dyad safety.
+* **Graph 4: Minimum Spanning Tree (MST Backbone Tree)** — NetworkX acyclic tree (`nx.minimum_spanning_tree`) connecting all 100 users through the strongest communication paths without redundant loops.
+* **Graph 5: Top 10 Betweenness Centrality Bridges (Bar Chart)** — Identifies the critical bridge accounts connecting disparate student clusters.
+* **Graph 6: Community Clusters & Aggressive Volume (Grouped Bar Chart)** — Compares user count vs. cumulative aggressive message volume across detected communities.
 
 ---
 

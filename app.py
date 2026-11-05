@@ -17,11 +17,11 @@ from src.network import (
     compute_network_metrics,
     get_user_network_context,
     create_network_figure,
-    create_degree_distribution_figure,
+    create_attack_network_figure,
+    create_ego_tree_figure,
+    create_mst_tree_figure,
     create_centrality_ranking_figure,
-    create_peerness_aggression_figure,
-    create_community_breakdown_figure,
-    create_reciprocity_figure
+    create_community_breakdown_figure
 )
 from src.recommender import generate_recommendation, ModerationRecommendation
 from src.data_store import (
@@ -764,65 +764,71 @@ elif current_page == "Network Analysis":
 
     st.markdown("<hr style='border-color: #e2e8f0; margin: 1.5rem 0;'>", unsafe_allow_html=True)
 
-    # Dedicated SNA Analytical Charts Suite
-    st.subheader("2. Structural Network Properties & Distributions")
-    st.caption("Quantitative social network analysis visualizations reflecting degree patterns, centrality rankings, and community structures.")
+    # Section 2: Linked Network & Tree Visualizations
+    st.subheader("2. Linked Network & Tree Visualizations")
+    st.caption("Advanced node-link and hierarchical tree structures visualizing relational dynamics and communication backbones.")
 
-    # Row 1 of SNA Graphs: Degree Distribution & Centrality Ranking
-    row1_c1, row1_c2 = st.columns(2, gap="medium")
-    with row1_c1:
-        st.markdown("**Graph 2: Node Degree Distribution**")
-        st.caption("Histogram showing interaction connectivity across all users.")
-        fig_deg = create_degree_distribution_figure(df_metrics)
-        st.plotly_chart(fig_deg, use_container_width=True)
+    tree_c1, tree_c2 = st.columns(2, gap="medium")
+    with tree_c1:
+        st.markdown("**Graph 2: Cyberbullying Attack Network (Node-Link)**")
+        st.caption("Directed harassment links showing bullies (red) and targeted victims (amber).")
+        fig_atk = create_attack_network_figure(df_cb, max_edges=120)
+        st.plotly_chart(fig_atk, use_container_width=True)
 
-    with row1_c2:
-        st.markdown("**Graph 3: Top 10 Betweenness Centrality Bridges**")
-        st.caption("Users with highest betweenness act as communication intermediaries.")
+    with tree_c2:
+        st.markdown(f"**Graph 3: Radial Ego-Tree for {highlight_target if highlight_target else 'usr_015'} (Tree Graph)**")
+        st.caption("Hierarchical radial star tree centered on root user branching to 1st-degree contacts.")
+        target_for_tree = highlight_target if highlight_target else "usr_015"
+        fig_ego = create_ego_tree_figure(target_for_tree, G, df_cb)
+        st.plotly_chart(fig_ego, use_container_width=True)
+
+    st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+
+    tree_c3, tree_c4 = st.columns(2, gap="medium")
+    with tree_c3:
+        st.markdown("**Graph 4: Minimum Spanning Tree (MST Backbone Tree)**")
+        st.caption("NetworkX acyclic tree preserving highest-frequency interaction paths without loops.")
+        fig_mst = create_mst_tree_figure(df_cb)
+        st.plotly_chart(fig_mst, use_container_width=True)
+
+    with tree_c4:
+        st.markdown("**Graph 5: Top 10 Betweenness Centrality Bridges (Bar Chart)**")
+        st.caption("Intermediary accounts with highest cross-community bridge influence.")
         fig_bet = create_centrality_ranking_figure(df_metrics)
         st.plotly_chart(fig_bet, use_container_width=True)
 
     st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
 
-    # Row 2 of SNA Graphs: Community Clusters & Peerness / Aggression
-    row2_c1, row2_c2 = st.columns(2, gap="medium")
-    with row2_c1:
-        st.markdown("**Graph 4: Community Clusters & Aggressive Volume**")
-        st.caption("User counts and aggressive message volume across detected communities.")
+    # Section 3: Community & Multi-Agent Architecture
+    row3_c1, row3_c2 = st.columns(2, gap="medium")
+    with row3_c1:
+        st.markdown("**Graph 6: Community Clusters & Aggressive Volume (Bar Chart)**")
+        st.caption("Student group sizes and cumulative aggressive communication counts.")
         fig_comm = create_community_breakdown_figure(df_metrics)
         st.plotly_chart(fig_comm, use_container_width=True)
 
-    with row2_c2:
-        st.markdown("**Graph 5: Peerness vs. Intent to Harm**")
-        st.caption("Dyad scatter plot illustrating social distance vs. aggressive intent.")
-        fig_peer = create_peerness_aggression_figure(df_cb)
-        if fig_peer:
-            st.plotly_chart(fig_peer, use_container_width=True)
-        else:
-            fig_recip = create_reciprocity_figure(summary)
-            st.plotly_chart(fig_recip, use_container_width=True)
-
-    st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
-
-    # Row 3 of SNA Graphs: Reciprocity & Dyad Breakdown
-    row3_c1, row3_c2 = st.columns([1, 1], gap="medium")
-    with row3_c1:
-        st.markdown("**Graph 6: Dyad Cyberbullying Ratio**")
-        st.caption("Proportion of benign vs cyberbullying interaction pairs.")
-        fig_recip = create_reciprocity_figure(summary)
-        st.plotly_chart(fig_recip, use_container_width=True)
     with row3_c2:
-        st.markdown("**Graph Summary & Methodology**")
+        st.markdown("**Agentic AI Architecture (Multi-Agent System)**")
         st.markdown(
             f"""
-            <div class="panel-box" style="font-size: 0.85rem; line-height: 1.6; color: #334155; height: 280px; overflow-y: auto;">
-                <p style="margin-top:0;"><strong>Social Network Analysis Insights:</strong></p>
-                <ul style="padding-left: 1.2rem; margin-top: -0.25rem;">
-                    <li><strong>Network Density ({summary.get('density', 0.96):.3f}):</strong> High communication density indicates an active and interconnected student body.</li>
-                    <li><strong>Reciprocity ({summary.get('reciprocity', 0.96):.3f}):</strong> Most communications are two-way exchanges. Asymmetric / non-reciprocal ties are prioritized during moderation audits.</li>
-                    <li><strong>Bullying Dyads ({summary.get('cb_dyads', 992):,} of {summary.get('total_edges', 9511):,}):</strong> Represents ~10.4% of all relationships exhibiting repeated aggressive intent.</li>
-                    <li><strong>Bridge Vulnerability:</strong> Users with elevated betweenness centrality require contextual review due to audience broadcast risks.</li>
-                </ul>
+            <div class="panel-box" style="font-size: 0.84rem; line-height: 1.55; color: #334155; height: 280px; overflow-y: auto;">
+                <div style="font-weight: 700; color: #0f172a; margin-bottom: 0.4rem;">4-Agent Collaborative Moderation Pipeline:</div>
+                <div style="margin-bottom: 0.4rem;">
+                    <span style="color: #2563eb; font-weight: 600;">• Agent 1: NLP Content Classifier</span><br>
+                    Scans incoming text for toxic, aggressive, and harassment language patterns.
+                </div>
+                <div style="margin-bottom: 0.4rem;">
+                    <span style="color: #059669; font-weight: 600;">• Agent 2: SNA Graph Analyst (NetworkX)</span><br>
+                    Evaluates user centrality, betweenness bridges, and audience broadcast reach.
+                </div>
+                <div style="margin-bottom: 0.4rem;">
+                    <span style="color: #d97706; font-weight: 600;">• Agent 3: Decision & Triage Agent</span><br>
+                    Synthesizes text + network signals to propose transparent Allow / Review / Flag actions.
+                </div>
+                <div>
+                    <span style="color: #7c3aed; font-weight: 600;">• Agent 4: Human-in-the-Loop Moderator</span><br>
+                    Supervisory human agent confirms or dismisses flags in the Review Queue.
+                </div>
             </div>
             """,
             unsafe_allow_html=True
