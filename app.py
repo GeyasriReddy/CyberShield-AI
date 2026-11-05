@@ -13,10 +13,15 @@ from datetime import datetime
 from src.styles import APP_CSS
 from src.classifier import predict_comment, ClassifierResult
 from src.network import (
-    load_synthetic_interaction_graph,
+    load_dataset_interaction_graph,
     compute_network_metrics,
     get_user_network_context,
-    create_network_figure
+    create_network_figure,
+    create_degree_distribution_figure,
+    create_centrality_ranking_figure,
+    create_peerness_aggression_figure,
+    create_community_breakdown_figure,
+    create_reciprocity_figure
 )
 from src.recommender import generate_recommendation, ModerationRecommendation
 from src.data_store import (
@@ -45,9 +50,11 @@ def init_session_state():
         st.session_state.comments = get_initial_sample_comments()
     
     if "graph" not in st.session_state or "metrics_map" not in st.session_state:
-        G = load_synthetic_interaction_graph()
+        G, df_cb, summary = load_dataset_interaction_graph()
         metrics_map, df_metrics = compute_network_metrics(G)
         st.session_state.graph = G
+        st.session_state.df_cb = df_cb
+        st.session_state.graph_summary = summary
         st.session_state.metrics_map = metrics_map
         st.session_state.df_metrics = df_metrics
 
@@ -129,7 +136,7 @@ with st.sidebar:
                 </div>
                 <div style="display:flex; justify-content:space-between;">
                     <span>Interaction Graph:</span>
-                    <span style="color: #2563eb; font-family: monospace; font-weight: 600;">20 Nodes (Synthetic)</span>
+                    <span style="color: #2563eb; font-family: monospace; font-weight: 600;">{st.session_state.graph_summary.get('total_nodes', 100)} Nodes</span>
                 </div>
                 <div style="display:flex; justify-content:space-between;">
                     <span>Queue Backlog:</span>
@@ -611,12 +618,20 @@ elif current_page == "Comment Analysis":
 # PAGE 3: NETWORK ANALYSIS
 # ==========================================
 elif current_page == "Network Analysis":
-    st.title("Social Network Interaction Topology")
+    st.title("Social Network Interaction Topology & Analytics")
+    
+    summary = st.session_state.graph_summary
+    is_real = summary.get("is_real", False)
+    
+    if is_real:
+        banner_text = f"<strong>Connected Real Dataset:</strong> {summary.get('source')} &bull; Analyzing <strong>{summary.get('total_nodes')} users</strong>, <strong>{summary.get('total_edges'):,} communication dyads</strong>, and <strong>{summary.get('total_messages'):,} total messages</strong>."
+    else:
+        banner_text = f"<strong>Synthetic Benchmark:</strong> {summary.get('source')} &bull; Using controlled 20-node fallback network."
+
     st.markdown(
-        """
+        f"""
         <div class="system-notice">
-            <strong>Synthetic Benchmark Graph:</strong> Visualizes 20 user nodes across 3 distinct communities with controlled bridge edges. 
-            Used to test betweenness centrality, degree distribution, and neighborhood inspection before loading production platform logs.
+            {banner_text}
         </div>
         """,
         unsafe_allow_html=True
@@ -625,16 +640,17 @@ elif current_page == "Network Analysis":
     G = st.session_state.graph
     metrics_map = st.session_state.metrics_map
     df_metrics = st.session_state.df_metrics
+    df_cb = st.session_state.df_cb
 
-    # Graph High-level Stats
+    # Graph High-level Stats (4 KPIs)
     st_col1, st_col2, st_col3, st_col4 = st.columns(4)
     with st_col1:
         st.markdown(
             f"""
             <div class="metric-card">
                 <div class="metric-label">Network Nodes</div>
-                <div class="metric-value">{len(G.nodes)}</div>
-                <div class="metric-subtext">Active accounts</div>
+                <div class="metric-value">{summary.get('total_nodes', len(G.nodes))}</div>
+                <div class="metric-subtext">Active student accounts</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -643,69 +659,73 @@ elif current_page == "Network Analysis":
         st.markdown(
             f"""
             <div class="metric-card">
-                <div class="metric-label">Interaction Edges</div>
-                <div class="metric-value">{len(G.edges)}</div>
-                <div class="metric-subtext">Verified communications</div>
+                <div class="metric-label">Communication Dyads</div>
+                <div class="metric-value">{summary.get('total_edges', len(G.edges)):,}</div>
+                <div class="metric-subtext">Active directed ties</div>
             </div>
             """,
             unsafe_allow_html=True
         )
     with st_col3:
-        comm_count = len(set(d["community"] for d in metrics_map.values()))
         st.markdown(
             f"""
             <div class="metric-card">
-                <div class="metric-label">Detected Clusters</div>
-                <div class="metric-value">{comm_count}</div>
-                <div class="metric-subtext">Greedy modularity</div>
+                <div class="metric-label">Network Reciprocity</div>
+                <div class="metric-value">{summary.get('reciprocity', 0.96) * 100:.1f}%</div>
+                <div class="metric-subtext">Two-way message exchanges</div>
             </div>
             """,
             unsafe_allow_html=True
         )
     with st_col4:
-        avg_deg = sum(d["degree"] for d in metrics_map.values()) / max(len(G.nodes), 1)
         st.markdown(
             f"""
             <div class="metric-card">
-                <div class="metric-label">Mean Node Degree</div>
-                <div class="metric-value">{avg_deg:.1f}</div>
-                <div class="metric-subtext">Ties per user</div>
+                <div class="metric-label">Cyberbullying Dyads</div>
+                <div class="metric-value" style="color: #dc2626;">{summary.get('cb_dyads', 992):,}</div>
+                <div class="metric-subtext">Flagged relationship pairs</div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 1.25rem;'></div>", unsafe_allow_html=True)
 
-    # User Selection & Interactive Network Canvas
+    # User Selection & Interactive Network Canvas (Graph 1)
+    st.subheader("1. Interactive Network Topology Map")
+    st.caption("Visual layout of user nodes and communications. Select a node below to highlight their ego-network.")
+
     user_list = ["(None)"] + sorted(list(G.nodes))
+    default_user = "usr_015" if "usr_015" in user_list else (user_list[1] if len(user_list) > 1 else "(None)")
     sel_user = st.selectbox(
         "Select User Node to Highlight Neighborhood:",
         options=user_list,
-        index=user_list.index("usr_103") if "usr_103" in user_list else 0
+        index=user_list.index(default_user) if default_user in user_list else 0
     )
 
     highlight_target = None if sel_user == "(None)" else sel_user
 
-    # Render Plotly Graph
-    fig = create_network_figure(G, metrics_map, highlight_user=highlight_target)
-    st.plotly_chart(fig, use_container_width=True)
+    # Render Plotly Graph 1
+    fig_topo = create_network_figure(G, metrics_map, highlight_user=highlight_target)
+    st.plotly_chart(fig_topo, use_container_width=True)
 
     # Detailed Node Inspection Drawer
     if highlight_target and highlight_target in metrics_map:
         node_info = metrics_map[highlight_target]
         neighbors = node_info["direct_neighbors"]
-        is_bridge = node_info['betweenness_centrality'] > 0.15
+        is_bridge = node_info['betweenness_centrality'] > 0.00035
 
-        neighbor_chips = "".join([f"<span class='user-chip' style='margin-right: 0.35rem;'>{n}</span>" for n in neighbors])
+        neighbor_chips = "".join([f"<span class='user-chip' style='margin-right: 0.35rem; margin-bottom: 0.25rem;'>{n}</span>" for n in neighbors[:25]])
+        if len(neighbors) > 25:
+            neighbor_chips += f"<span style='color: #64748b; font-size: 0.78rem;'> +{len(neighbors) - 25} more</span>"
 
         st.markdown(
             f"""
             <div class="panel-box" style="border-left: 3px solid #2563eb;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h4 style="margin: 0; color: #0f172a;">User Node Profile: <span class="user-chip">{highlight_target}</span></h4>
+                    <h4 style="margin: 0; color: #0f172a;">User Profile: <span class="user-chip">{highlight_target}</span></h4>
                     <span class="badge {'badge-review' if is_bridge else 'badge-allow'}">
-                        <span class="badge-dot"></span>{'Structural Bridge' if is_bridge else 'Local Participant'}
+                        <span class="badge-dot"></span>{'Key Network Bridge' if is_bridge else 'Active Participant'}
                     </span>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 0.85rem 0;">
@@ -718,12 +738,12 @@ elif current_page == "Network Analysis":
                         <div class="meta-value">{node_info['degree']}</div>
                     </div>
                     <div>
-                        <div class="meta-label">Degree Centrality</div>
-                        <div class="meta-value">{node_info['degree_centrality']:.3f}</div>
+                        <div class="meta-label">Betweenness Centrality</div>
+                        <div class="meta-value" style="color: {'#d97706' if is_bridge else '#0f172a'};">{node_info['betweenness_centrality']:.4f}</div>
                     </div>
                     <div>
-                        <div class="meta-label">Betweenness Centrality</div>
-                        <div class="meta-value" style="color: {'#d97706' if is_bridge else '#0f172a'};">{node_info['betweenness_centrality']:.3f}</div>
+                        <div class="meta-label">Aggressive Sent</div>
+                        <div class="meta-value" style="color: {'#dc2626' if node_info['aggressive_messages_sent'] > 10 else '#0f172a'};">{node_info['aggressive_messages_sent']}</div>
                     </div>
                 </div>
                 <div style="margin-top: 0.5rem;">
@@ -732,9 +752,9 @@ elif current_page == "Network Analysis":
                 </div>
                 <div style="font-size: 0.78rem; color: #475569; margin-top: 0.65rem; border-top: 1px solid #e2e8f0; padding-top: 0.5rem;">
                     <strong>Exposure Interpretation:</strong> {
-                        'High betweenness indicates this account bridges multiple distinct clusters. If toxic content originates here, viral amplification and cross-group harassment risk is elevated.'
+                        'High betweenness centrality indicates this user acts as a critical bridge between communities. Content originating from or passing through this node has disproportionate reach across the network.'
                         if is_bridge else
-                        'Normal connectivity pattern. Content exposure is largely bounded within the local community.'
+                        'Normal connectivity pattern. Communication is distributed across standard intra-cluster ties.'
                     }
                 </div>
             </div>
@@ -742,10 +762,77 @@ elif current_page == "Network Analysis":
             unsafe_allow_html=True
         )
 
-    st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color: #e2e8f0; margin: 1.5rem 0;'>", unsafe_allow_html=True)
 
-    # Centrality Ledger
-    st.subheader("Centrality Metrics Ledger")
+    # Dedicated SNA Analytical Charts Suite
+    st.subheader("2. Structural Network Properties & Distributions")
+    st.caption("Quantitative social network analysis visualizations reflecting degree patterns, centrality rankings, and community structures.")
+
+    # Row 1 of SNA Graphs: Degree Distribution & Centrality Ranking
+    row1_c1, row1_c2 = st.columns(2, gap="medium")
+    with row1_c1:
+        st.markdown("**Graph 2: Node Degree Distribution**")
+        st.caption("Histogram showing interaction connectivity across all users.")
+        fig_deg = create_degree_distribution_figure(df_metrics)
+        st.plotly_chart(fig_deg, use_container_width=True)
+
+    with row1_c2:
+        st.markdown("**Graph 3: Top 10 Betweenness Centrality Bridges**")
+        st.caption("Users with highest betweenness act as communication intermediaries.")
+        fig_bet = create_centrality_ranking_figure(df_metrics)
+        st.plotly_chart(fig_bet, use_container_width=True)
+
+    st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+
+    # Row 2 of SNA Graphs: Community Clusters & Peerness / Aggression
+    row2_c1, row2_c2 = st.columns(2, gap="medium")
+    with row2_c1:
+        st.markdown("**Graph 4: Community Clusters & Aggressive Volume**")
+        st.caption("User counts and aggressive message volume across detected communities.")
+        fig_comm = create_community_breakdown_figure(df_metrics)
+        st.plotly_chart(fig_comm, use_container_width=True)
+
+    with row2_c2:
+        st.markdown("**Graph 5: Peerness vs. Intent to Harm**")
+        st.caption("Dyad scatter plot illustrating social distance vs. aggressive intent.")
+        fig_peer = create_peerness_aggression_figure(df_cb)
+        if fig_peer:
+            st.plotly_chart(fig_peer, use_container_width=True)
+        else:
+            fig_recip = create_reciprocity_figure(summary)
+            st.plotly_chart(fig_recip, use_container_width=True)
+
+    st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
+
+    # Row 3 of SNA Graphs: Reciprocity & Dyad Breakdown
+    row3_c1, row3_c2 = st.columns([1, 1], gap="medium")
+    with row3_c1:
+        st.markdown("**Graph 6: Dyad Cyberbullying Ratio**")
+        st.caption("Proportion of benign vs cyberbullying interaction pairs.")
+        fig_recip = create_reciprocity_figure(summary)
+        st.plotly_chart(fig_recip, use_container_width=True)
+    with row3_c2:
+        st.markdown("**Graph Summary & Methodology**")
+        st.markdown(
+            f"""
+            <div class="panel-box" style="font-size: 0.85rem; line-height: 1.6; color: #334155; height: 280px; overflow-y: auto;">
+                <p style="margin-top:0;"><strong>Social Network Analysis Insights:</strong></p>
+                <ul style="padding-left: 1.2rem; margin-top: -0.25rem;">
+                    <li><strong>Network Density ({summary.get('density', 0.96):.3f}):</strong> High communication density indicates an active and interconnected student body.</li>
+                    <li><strong>Reciprocity ({summary.get('reciprocity', 0.96):.3f}):</strong> Most communications are two-way exchanges. Asymmetric / non-reciprocal ties are prioritized during moderation audits.</li>
+                    <li><strong>Bullying Dyads ({summary.get('cb_dyads', 992):,} of {summary.get('total_edges', 9511):,}):</strong> Represents ~10.4% of all relationships exhibiting repeated aggressive intent.</li>
+                    <li><strong>Bridge Vulnerability:</strong> Users with elevated betweenness centrality require contextual review due to audience broadcast risks.</li>
+                </ul>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.markdown("<hr style='border-color: #e2e8f0; margin: 1.5rem 0;'>", unsafe_allow_html=True)
+
+    # Centrality Ledger Table
+    st.subheader("3. Centrality Metrics Ledger")
+    st.caption("Tabular view of all user nodes sorted by betweenness centrality.")
     st.dataframe(df_metrics, use_container_width=True, hide_index=True)
 
 
